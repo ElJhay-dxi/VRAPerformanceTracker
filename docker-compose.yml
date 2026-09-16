@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: perftracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: perftracker
+      POSTGRES_PASSWORD: perftracker
+      POSTGRES_DB: perftracker
+    ports:
+      - "5433:5432"
+    volumes:
+      - perftracker-pgdata:/var/lib/postgresql/data
+
+volumes:
+  perftracker-pgdata:

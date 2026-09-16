@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vpt-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "web", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "vpt-api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "api/PerformanceTracker.Api", "--launch-profile", "http"],
+      "port": 5202
+    }
+  ]
+}

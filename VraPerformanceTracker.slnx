@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/api/">
+    <Project Path="api/PerformanceTracker.Api/PerformanceTracker.Api.csproj" />
+  </Folder>
+</Solution>
