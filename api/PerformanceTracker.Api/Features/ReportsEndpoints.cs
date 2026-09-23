@@ -190,7 +190,7 @@ public static class ReportsEndpoints
 
             var list = await query
                 .OrderByDescending(r => r.SubmittedAt ?? r.UpdatedAt)
-                .Select(r => r.ToSummary())
+                .Select(r => r.ToSummary(false))
                 .ToListAsync();
             return Results.Ok(list);
         });
@@ -293,7 +293,7 @@ public static class ReportsEndpoints
             var items = await query
                 .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month).ThenBy(r => r.StaffUser.FullName)
                 .Skip((page - 1) * pageSize).Take(pageSize)
-                .Select(r => r.ToSummary())
+                .Select(r => r.ToSummary(false))
                 .ToListAsync();
             return Results.Ok(new Paged<ReportSummaryResponse>(items, page, pageSize, total));
         });
@@ -313,7 +313,7 @@ public static class ReportsEndpoints
 
             var rows = await query
                 .OrderByDescending(r => r.Year).ThenByDescending(r => r.Month).ThenBy(r => r.StaffUser.FullName)
-                .Select(r => r.ToSummary())
+                .Select(r => r.ToSummary(false))
                 .ToListAsync();
 
             var csv = new System.Text.StringBuilder();

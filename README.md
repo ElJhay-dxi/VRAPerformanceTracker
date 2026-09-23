@@ -4,7 +4,7 @@ Web app that replaces the VRA Academy **Monthly Performance Tracking Form** (a W
 document). New hires fill their monthly report online, supervisors appraise it, HR and
 admins oversee everything.
 
-- **Backend:** ASP.NET Core (.NET 10) minimal API, EF Core 10, PostgreSQL.
+- **Backend:** ASP.NET Core (.NET 9) minimal API, EF Core 9, PostgreSQL.
 - **Frontend:** React 19 + TypeScript + Vite, React Router. Plain fetch, no UI library.
 - **Auth:** dev cookie sign-in now; Microsoft Entra ID (Azure AD) later — see [Auth](#auth).
 
@@ -21,7 +21,7 @@ Roles live in our database. An Admin changes them in the app — Entra only prov
 
 ## Prerequisites
 
-- .NET SDK 10
+- .NET SDK 9
 - Node 20+ and pnpm
 - PostgreSQL 14+ running locally (Postgres.app, Homebrew, or the bundled `docker-compose.yml`)
 

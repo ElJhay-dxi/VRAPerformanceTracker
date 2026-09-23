@@ -6,6 +6,21 @@
 
 ## Status
 
+Session 7 done (2026-09-23). Jeffrey had pushed the repo to GitHub
+(`ElJhay-dxi/VRAPerformanceTracker`) and cloned it onto a Windows laptop to work from
+there too — that machine only has the .NET 9 SDK installed and, per Jeffrey, can't
+take .NET 10. Rather than block Windows-side work, **downgraded the API from .NET 10
+to .NET 9**: `TargetFramework` → `net9.0`, every version-locked package to its 9.x
+line (`Microsoft.AspNetCore.OpenApi` 9.0.20, `Microsoft.EntityFrameworkCore.Design`
+9.0.20, `Npgsql.EntityFrameworkCore.PostgreSQL` 9.0.4), local `dotnet-ef` tool → 9.0.20.
+One real compile break surfaced by the downgrade (not a workaround-required kind —
+see the CS0854 gotcha in `CLAUDE.md`), fixed properly. Verified thoroughly: clean
+build, ran against the existing dev DB, *and* ran migrations + seed from a throwaway
+blank database to prove a fresh clone (like the Windows laptop's) migrates cleanly
+under EF Core 9 — smoke-tested auth, users, reports list/export, and the analytics
+PDF export afterward. Frontend untouched (Vite/React, no .NET dependency). Ready for
+Jeffrey to commit and push. Not deployed.
+
 Session 6 done (2026-09-15). `GET /reports` gained a date-range filter
 (`fromYear/fromMonth`–`toYear/toMonth`, by report period, either bound optional); the
 **All reports** page got quick presets (this month / last 3 / last 6 months / this
@@ -56,7 +71,8 @@ resubmit.
 | Reinstate archived staff | Built + verified (session 5) | `POST /archive/{id}/reinstate`, Admin only. Rebuilds user + reports from the snapshot; 409 if the email was reused. |
 | All-reports date filter + exports | Built + verified curl + browser (session 6) | Range filter on `GET /reports`; `GET /reports/export` (CSV, filtered list). |
 | Full HR PDF report | Built + verified curl + browser (session 6c) | `GET /analytics/hr/export` — PDF only, every analytic the app tracks. See `Services/HrFullReport.cs` / `AnalyticsExports.cs`. |
-| Git | Not initialized | Jeffrey to `git init` + commit from Rider. |
+| Target framework | **.NET 9** (was .NET 10 through session 6) | Downgraded session 7 so the project builds on Jeffrey's Windows laptop (.NET 9 SDK only). Build + fresh-DB migrate + smoke test all verified. |
+| Git | **On GitHub** — `ElJhay-dxi/VRAPerformanceTracker` | Repo initialized and pushed since session 6; cloned onto a Windows laptop too. The downgrade in this session is uncommitted — Jeffrey to commit + push. |
 | Deploy | Not started | Target: Azure App Service + Azure Database for PostgreSQL. |
 
 ## Open threads / next actions
@@ -65,7 +81,7 @@ resubmit.
 - [ ] Config-drive the first seeded admin (`SeedAdmin:Email`) for a clean production deploy.
 - [ ] HR now has the Analytics page + overview cards. Still open: does HR need any write/oversight action beyond read-only?
 - [ ] `StampTimestamps()` now only stamps `CreatedAt`/`UpdatedAt` on Added when they're still `default` — so a reinstate can carry the original timestamps. Keep this in mind if any other insert path relies on the old always-overwrite behaviour (none currently do).
-- [ ] `git init` + first commit from Rider; create the private remote (six sessions of uncommitted work now).
+- [ ] Repo is on GitHub (`ElJhay-dxi/VRAPerformanceTracker`) and cloned onto a Windows laptop. The .NET 9 downgrade (session 7) is sitting uncommitted on the Mac — Jeffrey to commit + push, then pull on Windows.
 - [ ] Add API integration tests for the report lifecycle and the RBAC guards.
 - [ ] Production config: move connection string + (later) Entra secrets to env vars / `appsettings.Local.json`.
 - [ ] Bundle is ~468 kB (motion + lucide). Fine for now; consider route-level code-splitting before deploy.
@@ -627,6 +643,68 @@ gotten from the app to it."
   so he could look at it directly rather than take a description on faith. Both
   projects build clean.
 
+### 2026-09-23 — Session 7 (downgrade to .NET 9 for the Windows laptop)
+
+Jeffrey pushed the repo to GitHub (`ElJhay-dxi/VRAPerformanceTracker`) between
+sessions and cloned it onto a Windows laptop (`elijah.agyei`'s machine) to work from
+there too — `dotnet run` failed there with `NETSDK1045: The current .NET SDK does not
+support targeting .NET 10.0`, because that machine only has .NET SDK `9.0.318`
+installed. Jeffrey can't install .NET 10 there ("for certain reasons" — sounded like a
+locked-down work machine, not a technical conflict; confirmed installing a newer SDK
+alongside an older one is safe and doesn't touch other projects, since the SDK used is
+chosen per-project by `TargetFramework`, not machine-wide — but that didn't change his
+constraint). Asked him to downgrade the project instead of the laptop.
+
+- **`PerformanceTracker.Api.csproj`** — `TargetFramework` → `net9.0`.
+  `Microsoft.AspNetCore.OpenApi` 10.0.2 → **9.0.20**,
+  `Microsoft.EntityFrameworkCore.Design` 10.0.11 → **9.0.20**,
+  `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3 → **9.0.4** (checked NuGet's flat
+  container index directly for each package's latest stable 9.x — `dotnet package
+  search` only surfaces the newest version overall, not per-major). Left
+  `Microsoft.Identity.Web`, `PDFsharp-MigraDoc`, `OpenSans` untouched — none are
+  framework-version-locked.
+- **`dotnet-tools.json`** — local `dotnet-ef` pin 10.0.11 → **9.0.20**, matching the
+  EF Core package version (a mismatched `dotnet-ef` is a classic source of confusing
+  design-time errors).
+- **Real compile break, not a version-number formality**: three call sites —
+  `Features/ReportsEndpoints.cs` — did `.Select(r => r.ToSummary())` inside an
+  `IQueryable<PerformanceReport>` pipeline. `ToSummary(bool hideScores = false)`'s
+  default argument, filled in inside a lambda that compiles to an `Expression<Func<>>`
+  for EF Core, is a **CS0854** error under C# 13 (net9.0's default `LangVersion`) but
+  compiled silently under C# 14 (net10.0's default) — the .NET 10 project never hit
+  this. Fixed by making the default explicit: `.Select(r => r.ToSummary(false))` at
+  all three sites (`/assigned`, `/` admin list, `/export`) — zero behavior change,
+  `false` was already the implied default. Full detail + the general lesson (always
+  pass every argument explicitly to a defaulted extension method inside an EF Core
+  query) is in `CLAUDE.md` → Gotchas.
+- **Verified properly, not just "it compiled"**:
+  1. `dotnet build` clean, 0 errors.
+  2. Ran against the *existing* dev database — migrations reported already up to date,
+     server started, smoke-tested `/health`, dev-login, `/users`, `/reports` (exercises
+     the fixed `.ToSummary(false)` calls), `/reports/export` CSV, `/analytics/hr`, and
+     the PDF export — all 200s, correct data.
+  3. The more important check: created a **throwaway blank database**
+     (`perftracker_net9check`) and pointed the app at it via an env-var connection
+     string override, to prove a *fresh clone* — exactly what the Windows laptop just
+     did — migrates cleanly under EF Core 9 tooling rather than only working because
+     the existing dev DB's schema predates the downgrade. All 4 migrations
+     (`InitialSchema` → `AddStaffArchive` → `RolloverAndItemReview` →
+     `NormalizeNonStaffSupervisors`) applied in order from nothing, `DbSeeder` seeded
+     the usual 6 demo users, health check passed. Dropped the throwaway DB afterward.
+  4. Frontend rebuilt too (sanity check only — Vite/React has no .NET dependency, was
+     never going to be affected).
+- **This Mac had no .NET 9 SDK either** (only 6/7/8/10 — checked `dotnet --list-sdks`
+  before touching anything). Build and run both worked anyway via .NET 10 runtime
+  roll-forward, but flagged it as worth installing properly. Jeffrey ran
+  `brew install --cask dotnet-sdk@9` himself in his own terminal the same session
+  (the cask installer needs a `sudo` password the sandbox can't supply) — resolved to
+  `9.0.318`, the exact same patch as the Windows laptop. Rebuilt and re-ran afterward
+  to confirm it's genuinely on the real SDK now, not just rolling forward. Resolved.
+- Did not touch git — no `git add`/`commit`/`push` run from here, per the standing
+  rule. Everything above is sitting as uncommitted changes on the Mac, ready for
+  Jeffrey to commit and push himself, then pull on the Windows laptop.
+
 ## Follow-ups for next session
 
-- [ ] None outstanding — session 6c browser/PDF-verified; nothing pending.
+- [ ] Confirm Jeffrey successfully committed/pushed the .NET 9 downgrade and that
+  `dotnet run` now works clean on the Windows laptop.

@@ -16,8 +16,9 @@ organization data, so auth and an audit trail are in from the start.
 
 ## Stack
 
-- **API:** ASP.NET Core (.NET 10), minimal APIs grouped by feature, EF Core 10, Npgsql.
-  Runs on `http://localhost:5202` (http launch profile).
+- **API:** ASP.NET Core (.NET 9), minimal APIs grouped by feature, EF Core 9, Npgsql.
+  Runs on `http://localhost:5202` (http launch profile). Was .NET 10 through session 6;
+  downgraded 2026-09-23 — see Key decisions.
 - **DB:** PostgreSQL. Local dev against Postgres.app on 5432; `docker-compose.yml`
   offers a container on 5433 as an alternative. Production target: Azure Database for
   PostgreSQL.
@@ -71,10 +72,29 @@ organization data, so auth and an audit trail are in from the start.
   just PDF ("cleaner… exactly what I need") and to pack in everything the app can
   report on. Both packages were removed again — see `GET /analytics/hr/export` above
   for what the single PDF now contains.
-- **2026-08-27 — `.slnx` solution format** (the .NET 10 `dotnet new sln` default).
-  Recent Rider handles it; note if an older Rider chokes.
-- **2026-08-27 — Local `dotnet-ef` tool pinned to 10.0.11** in `dotnet-tools.json`
-  (the machine's global `dotnet-ef` is 8.x and won't drive EF 10 design-time).
+- **2026-08-27 — `.slnx` solution format** (the .NET 10 `dotnet new sln` default at the
+  time the repo was scaffolded — the project itself later moved to .NET 9, see below;
+  `.slnx` is framework-independent and needed no change). Recent Rider handles it; note
+  if an older Rider chokes.
+- **2026-08-27 — Local `dotnet-ef` tool pinned** in `dotnet-tools.json` (the machine's
+  global `dotnet-ef` is 8.x and won't drive this project's design-time tooling). Pin
+  tracks whatever EF Core version the project targets — `9.0.20` since the 2026-09-23
+  downgrade, was `10.0.11` before.
+- **2026-09-23 — Downgraded the API from .NET 10 to .NET 9.** Jeffrey's Windows laptop
+  (`elijah.agyei`'s machine) only has the .NET 9 SDK (`9.0.318`) and, per Jeffrey,
+  can't have .NET 10 installed there. Rather than block Windows-side work, downgraded
+  `TargetFramework` to `net9.0` and every version-locked package to its 9.x line:
+  `Microsoft.AspNetCore.OpenApi` → 9.0.20, `Microsoft.EntityFrameworkCore.Design` →
+  9.0.20, `Npgsql.EntityFrameworkCore.PostgreSQL` → 9.0.4, local `dotnet-ef` tool →
+  9.0.20. `Microsoft.Identity.Web`, `PDFsharp-MigraDoc`, and `OpenSans` are
+  framework-agnostic and needed no change. One real compile break surfaced by the
+  downgrade — see Gotchas — fixed, not worked around. All 4 existing migrations
+  replay cleanly on a brand-new database under EF Core 9 tooling (verified against a
+  throwaway database, not just the existing dev one). This machine (the Mac) initially
+  had no .NET 9 SDK either (only 6/7/8/10) and building/running worked anyway via
+  .NET 10 runtime roll-forward; Jeffrey installed `dotnet-sdk@9` (9.0.318 — matches the
+  Windows laptop exactly) the same day, confirmed with a clean build + run on the real
+  SDK afterward.
 
 ## Domain model
 
@@ -189,6 +209,18 @@ DTO shapes the API returns. Never edited. Migration `AddStaffArchive` (2026-09-0
 
 ## Gotchas hit and fixed
 
+- **CS0854 on downgrade to .NET 9: "An expression tree may not contain a call or
+  invocation that uses optional arguments."** Three places called
+  `.Select(r => r.ToSummary())` on an `IQueryable<PerformanceReport>` — `ToSummary`
+  takes an optional `hideScores = false` parameter, and the lambda passed to
+  `IQueryable.Select` compiles to an `Expression<Func<...>>`, not a plain delegate.
+  Filling in an omitted default argument inside an expression tree is a compile error
+  under C# 13 (net9.0's default `LangVersion`); it silently compiled fine under C# 14
+  (net10.0's default). Fixed by making the default explicit at each call site —
+  `.Select(r => r.ToSummary(false))` — in `Features/ReportsEndpoints.cs`. Worth
+  remembering for any future extension method with a default parameter called inside
+  an EF Core LINQ query: pass every argument explicitly there, never rely on the
+  default.
 - **PDFsharp 6 has no OS font access by default** — `PdfDocumentRenderer.RenderDocument()`
   threw `InvalidOperationException: No appropriate font found for family name 'Courier
   New'` even though nothing in the document asks for Courier New (MigraDoc uses it
